@@ -1,0 +1,34 @@
+{
+  "_aide": [
+    "championnats : promus présents dans le dataset (nom -> championnat) et relégués (nom -> \"\"). Un nom partiel suffit.",
+    "clubs_wikipedia : promus absents ou incomplets dans le dataset. Effectif récupéré sur Wikidata via le titre exact de l'article Wikipédia anglais.",
+    "transferts : joueur (nom Transfermarkt) + club. Ajoute \"id\" (id Transfermarkt) si plusieurs joueurs ont le même nom.",
+    "departs : joueurs partis hors des 5 championnats que Wikidata n'a pas vus."
+  ],
+  "championnats": {
+    "_saison": "2026-27",
+    "Ipswich": "Premier League",
+    "West Ham": "", "Burnley": "", "Wolverhampton": "",
+    "Mallorca": "", "Girona": "", "Oviedo": "",
+    "Venezia": "Serie A", "Frosinone": "Serie A", "Monza": "Serie A",
+    "Cremonese": "", "Hellas Verona": "", "Pisa": "",
+    "Schalke": "Bundesliga",
+    "Wolfsburg": "", "Heidenheim": "", "St. Pauli": "",
+    "Troyes": "Ligue 1",
+    "Nantes": "", "Metz": ""
+  },
+  "clubs_wikipedia": {
+    "Coventry": { "article": "Coventry City F.C.", "championnat": "Premier League" },
+    "Hull City": { "article": "Hull City A.F.C.", "championnat": "Premier League" },
+    "Racing Santander": { "article": "Racing de Santander", "championnat": "Liga" },
+    "Deportivo La Corogne": { "article": "Deportivo de A Coruña", "championnat": "Liga" },
+    "Málaga": { "article": "Málaga CF", "championnat": "Liga" },
+    "Elversberg": { "article": "SV Elversberg", "championnat": "Bundesliga" },
+    "Paderborn": { "article": "SC Paderborn 07", "championnat": "Bundesliga" },
+    "Le Mans": { "article": "Le Mans FC", "championnat": "Ligue 1" }
+  },
+  "transferts": [
+    { "joueur": "Matias Fernandez-Pardo", "club": "Newcastle" }
+  ],
+  "departs": ["Leon Opitz"]
+}

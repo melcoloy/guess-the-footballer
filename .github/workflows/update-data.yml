@@ -1,0 +1,26 @@
+name: Mise à jour des joueurs
+
+on:
+  schedule:
+    - cron: "0 6 * * 3"   # chaque mercredi à 6h UTC
+  workflow_dispatch:       # bouton "Run workflow" dans l'onglet Actions
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/build_players.py
+      - name: Commit si les données ont changé
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/players.json
+          git diff --cached --quiet || git commit -m "Mise à jour des joueurs ($(date -u +%F))"
+          git push

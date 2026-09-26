@@ -4,6 +4,9 @@ const POOL_DAILY = 200;     // le joueur du jour est tiré parmi les N plus cot�
 const POOL_FREE = 400;      // idem pour la partie libre
 const START = Date.UTC(2026, 0, 1);
 const POS = { GB: "Gardien", DEF: "Défenseur", MIL: "Milieu", ATT: "Attaquant" };
+const FOOT = { right: "Droit", left: "Gauche", both: "Deux pieds" };
+const fmtFoot = f => FOOT[f] || "—";
+const fmtHeight = h => (h ? (h / 100).toFixed(2).replace(".", ",") + " m" : "—");
 
 const $ = id => document.getElementById(id);
 const norm = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -70,6 +73,10 @@ function cmp(g) {
     pos: g.pos === t.pos ? "hit" : "",
     y: g.y === t.y ? "hit" : Math.abs(g.y - t.y) <= 2 ? "near" : "",
     arrow: g.y === t.y ? "" : (t.y > g.y ? " ↑" : " ↓"),
+    // pied fort et taille : neutres si l'une des deux valeurs est inconnue
+    foot: !g.foot || !t.foot ? "" : g.foot === t.foot ? "hit" : "",
+    h: !g.h || !t.h ? "" : g.h === t.h ? "hit" : Math.abs(g.h - t.h) <= 3 ? "near" : "",
+    harrow: !g.h || !t.h || g.h === t.h ? "" : (t.h > g.h ? " ↑" : " ↓"),
   };
 }
 
@@ -85,7 +92,8 @@ function addRow(g, animate = true) {
   tr.append(
     cell(g.n, g.id === target.id ? "name hit" : "name"),
     cell(g.l, r.l), cell(g.c, r.c), cell(g.nat, r.nat),
-    cell(POS[g.pos], r.pos), cell(g.y + r.arrow, r.y)
+    cell(POS[g.pos], r.pos), cell(g.y + r.arrow, r.y),
+    cell(fmtFoot(g.foot), r.foot), cell(fmtHeight(g.h) + r.harrow, r.h)
   );
   $("rows").prepend(tr);
 }
@@ -106,6 +114,7 @@ function checkEnd() {
   const club = document.createElement("div"); club.style.cssText = "font-size:.8rem;font-weight:700"; club.textContent = t.c;
   const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = t.n;
   const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `${t.nat} · ${POS[t.pos]} · ${t.y}`;
+  if (t.h || t.foot) meta.append(document.createElement("br"), `${fmtHeight(t.h)} · pied ${fmtFoot(t.foot).toLowerCase()}`);
   back.append(club, nm, meta);
   $("slot").classList.add("revealed");
   $("resTitle").textContent = won ? "Vignette collée !" : "Raté pour cette fois";
@@ -196,7 +205,7 @@ $("again").onclick = () => newGame();
 $("share").onclick = async () => {
   const e = { hit: "🟩", near: "🟧", "": "⬜" };
   const won = guesses.some(g => g.id === target.id);
-  const lines = guesses.map(g => { const r = cmp(g); return [r.l, r.c, r.nat, r.pos, r.y].map(x => e[x]).join(""); }).join("\n");
+  const lines = guesses.map(g => { const r = cmp(g); return [r.l, r.c, r.nat, r.pos, r.y, r.foot, r.h].map(x => e[x]).join(""); }).join("\n");
   const head = mode === "daily" ? `Guess the Footballer #${dayNum() + 1}` : "Guess the Footballer (libre)";
   const txt = `${head} ${won ? guesses.length : "X"}/${MAX}\n${lines}\n${location.href}`;
   let ok = false;

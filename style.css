@@ -61,7 +61,7 @@ input:disabled{opacity:.5}
 
 /* Grille */
 .gridwrap{overflow-x:auto}
-table{border-collapse:separate; border-spacing:4px; width:100%; min-width:640px}
+table{border-collapse:separate; border-spacing:4px; width:100%; min-width:820px}
 th{font-size:.8rem; font-weight:700; color:var(--muted); text-align:left; padding:0 .4rem}
 td{background:var(--miss); color:var(--missInk); border-radius:8px; padding:.55rem .5rem; font-weight:600; font-size:.92rem; vertical-align:middle}
 td.name{background:var(--card); border:2px solid var(--line)}
@@ -70,6 +70,7 @@ td.near{background:var(--near); color:#fff}
 tr.new td{animation:pop .35s ease-out backwards}
 tr.new td:nth-child(2){animation-delay:.06s} tr.new td:nth-child(3){animation-delay:.12s}
 tr.new td:nth-child(4){animation-delay:.18s} tr.new td:nth-child(5){animation-delay:.24s} tr.new td:nth-child(6){animation-delay:.3s}
+tr.new td:nth-child(7){animation-delay:.36s} tr.new td:nth-child(8){animation-delay:.42s}
 @keyframes pop{from{transform:scale(.85); opacity:0}}
 @media (prefers-reduced-motion:reduce){tr.new td{animation:none}}
 

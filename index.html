@@ -42,7 +42,7 @@
 
   <div class="gridwrap">
     <table>
-      <thead><tr><th>Joueur</th><th>Championnat</th><th>Club</th><th>Nationalité</th><th>Poste</th><th>Né en</th></tr></thead>
+      <thead><tr><th>Joueur</th><th>Championnat</th><th>Club</th><th>Nationalité</th><th>Poste</th><th>Né en</th><th>Pied</th><th>Taille</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -58,8 +58,8 @@
 
   <p class="legend">
     <b style="background:var(--hit)"></b>identique ·
-    <b style="background:var(--near)"></b>proche (même continent, ou né à 2 ans près) ·
-    <b style="background:var(--miss)"></b>différent. La flèche indique si le joueur mystère est né plus tôt ↓ ou plus tard ↑.
+    <b style="background:var(--near)"></b>proche (même continent, né à 2 ans près, ou taille à 3 cm près) ·
+    <b style="background:var(--miss)"></b>différent. Les flèches indiquent si le joueur mystère est né plus tard ↑ ou plus tôt ↓, et s'il est plus grand ↑ ou plus petit ↓. « — » : donnée inconnue.
   </p>
   <p class="legend" id="updated"></p>
 </main>

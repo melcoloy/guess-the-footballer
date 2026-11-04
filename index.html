@@ -4,65 +4,171 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Guess the Footballer</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="description" content="Devine le footballeur mystère des 5 grands championnats en 8 essais. Un nouveau joueur chaque jour, ou des parties libres à volonté.">
+<meta name="theme-color" content="#EAF1F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1929" media="(prefers-color-scheme: dark)">
+<!-- Aperçu du lien (WhatsApp, Discord, X…). L'image doit avoir une adresse complète : adapte-la si le site change d'adresse. -->
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:title" content="Guess the Footballer">
+<meta property="og:description" content="Devine le footballeur mystère des 5 grands championnats en 8 essais.">
+<meta property="og:url" content="https://melcoloy.github.io/guess-the-footballer/">
+<meta property="og:image" content="https://melcoloy.github.io/guess-the-footballer/icons/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preload" href="fonts/anton-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/barlow-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
+<script>
+  // appliqué avant l'affichage pour éviter un flash de la mauvaise couleur
+  try {
+    const s = JSON.parse(localStorage.getItem("gtf-settings")) || {};
+    if (s.theme === "light" || s.theme === "dark") document.documentElement.dataset.theme = s.theme;
+    if (s.contrast) document.documentElement.dataset.contrast = "high";
+  } catch {}
+</script>
 </head>
 <body>
 <main>
   <header>
-    <div>
+    <div class="titlebar">
       <h1>Guess the Footballer</h1>
-      <p class="sub" id="sub">Chargement des joueurs…</p>
+      <nav class="tools" aria-label="Menu">
+        <button class="icon" id="bHelp" aria-label="Comment jouer" title="Comment jouer">?</button>
+        <button class="icon" id="bStats" aria-label="Statistiques" title="Statistiques">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
+        </button>
+        <button class="icon" id="bSettings" aria-label="Réglages" title="Réglages">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /></svg>
+        </button>
+      </nav>
     </div>
+    <p class="sub" id="sub">Chargement des joueurs…</p>
     <div class="modes" role="group" aria-label="Mode de jeu">
       <button class="btn" id="mDaily" aria-pressed="true">Joueur du jour</button>
       <button class="btn" id="mFree" aria-pressed="false">Partie libre</button>
+    </div>
+    <div class="options" id="freeOpts" hidden>
+      <label>Difficulté
+        <select id="optLevel">
+          <option value="100">Facile · 100 stars</option>
+          <option value="400">Moyen · 400 joueurs</option>
+          <option value="1000">Difficile · 1000 joueurs</option>
+          <option value="0">Expert · tous</option>
+        </select>
+      </label>
+      <label>Championnat
+        <select id="optLeague">
+          <option value="">Les 5</option>
+          <option>Ligue 1</option>
+          <option>Premier League</option>
+          <option>Liga</option>
+          <option>Serie A</option>
+          <option>Bundesliga</option>
+        </select>
+      </label>
     </div>
   </header>
 
   <section class="stage">
     <div class="slot" id="slot" aria-live="polite">
       <div class="flip">
-        <div class="face front"><div class="q">?</div><small id="slotNum"></small></div>
+        <div class="face front">
+          <div class="q" id="slotQ">?</div>
+          <small id="slotNum"></small>
+          <small class="hint" id="hint" hidden></small>
+        </div>
         <div class="face back" id="back"></div>
       </div>
     </div>
     <div class="play">
       <label for="guess">Ton essai</label>
       <div class="combo">
-        <input id="guess" type="text" autocomplete="off" disabled placeholder="Tape un nom (ex. Mbappé)" role="combobox" aria-expanded="false" aria-controls="list" aria-autocomplete="list">
+        <input id="guess" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" disabled placeholder="Tape un nom (ex. Mbappé)" role="combobox" aria-expanded="false" aria-controls="list" aria-autocomplete="list">
         <ul class="list" id="list" role="listbox" hidden></ul>
       </div>
       <div class="count" id="count"></div>
     </div>
   </section>
 
-  <div class="gridwrap">
-    <table>
-      <thead><tr><th>Joueur</th><th>Championnat</th><th>Club</th><th>Nationalité</th><th>Poste</th><th>Né en</th><th>Pied</th><th>Taille</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
+  <div class="grid" id="grid" role="table" aria-label="Tes essais">
+    <div class="ghead" role="row">
+      <span role="columnheader">Joueur</span><span role="columnheader">Champ.</span><span role="columnheader">Club</span>
+      <span role="columnheader">Nationalité</span><span role="columnheader">Poste</span><span role="columnheader">Né en</span>
+      <span role="columnheader">Pied</span><span role="columnheader">Taille</span><span role="columnheader">Valeur</span>
+    </div>
+    <div id="rows" role="rowgroup"></div>
   </div>
 
   <div class="result" id="result">
     <h2 id="resTitle"></h2>
-    <p id="resText" style="margin:0"></p>
+    <p id="resText"></p>
+    <p class="next" id="next" hidden></p>
     <div class="row">
-      <button class="btn" id="share">Copier le résultat</button>
+      <button class="btn solid" id="share">Partager</button>
       <button class="btn" id="again" hidden>Nouvelle partie</button>
+      <button class="btn" id="toFree" hidden>Jouer en partie libre</button>
+      <button class="btn" id="showStats">Statistiques</button>
     </div>
   </div>
 
   <p class="legend">
-    <b style="background:var(--hit)"></b>identique ·
-    <b style="background:var(--near)"></b>proche (même continent, né à 2 ans près, ou taille à 3 cm près) ·
-    <b style="background:var(--miss)"></b>différent. Les flèches indiquent si le joueur mystère est né plus tard ↑ ou plus tôt ↓, et s'il est plus grand ↑ ou plus petit ↓. « — » : donnée inconnue.
+    <b class="sw hit"></b>identique · <b class="sw near"></b>proche · <b class="sw miss"></b>différent ·
+    <button class="link" id="legendHelp">voir les règles</button>
   </p>
   <p class="legend" id="updated"></p>
 </main>
+
+<dialog id="dHelp" aria-labelledby="hHelp">
+  <form method="dialog"><button class="close" aria-label="Fermer">×</button></form>
+  <h2 id="hHelp">Comment jouer</h2>
+  <p>Trouve le footballeur mystère des 5 grands championnats en <b>8 essais</b>. Tape un nom, choisis un joueur dans la liste : chaque case te dit si tu chauffes.</p>
+  <ul class="rules">
+    <li><b class="sw hit"></b><b>Vert : identique.</b></li>
+    <li><b class="sw near"></b><b>Orange : proche.</b> Nationalité du même continent, poste voisin (défenseur ↔ milieu ↔ attaquant), né à 2 ans près, taille à 3 cm près, valeur à 25 % près.</li>
+    <li><b class="sw miss"></b><b>Gris : différent.</b></li>
+    <li><b>↑ ↓</b> : le joueur mystère est né plus tard ↑ ou plus tôt ↓, est plus grand ↑ ou plus petit ↓, vaut plus ↑ ou moins ↓.</li>
+    <li><b>—</b> : donnée inconnue, la case reste neutre.</li>
+    <li>Après 5 essais ratés, les <b>initiales</b> du joueur apparaissent sur la vignette.</li>
+  </ul>
+  <p><b>Joueur du jour</b> : le même pour tout le monde, nouveau chaque jour à minuit. <b>Partie libre</b> : autant de parties que tu veux, avec la difficulté et le championnat de ton choix.</p>
+  <p class="muted">Vert et orange difficiles à distinguer ? Active le contraste élevé dans les réglages.</p>
+  <form method="dialog"><button class="btn solid">C'est parti</button></form>
+</dialog>
+
+<dialog id="dStats" aria-labelledby="hStats">
+  <form method="dialog"><button class="close" aria-label="Fermer">×</button></form>
+  <h2 id="hStats">Statistiques</h2>
+  <div class="tabs" role="group" aria-label="Mode">
+    <button class="btn" id="stDaily" aria-pressed="true">Joueur du jour</button>
+    <button class="btn" id="stFree" aria-pressed="false">Partie libre</button>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <h3>Nombre d'essais</h3>
+  <div class="dist" id="dist"></div>
+  <p class="next" id="statsNext" hidden></p>
+</dialog>
+
+<dialog id="dSettings" aria-labelledby="hSettings">
+  <form method="dialog"><button class="close" aria-label="Fermer">×</button></form>
+  <h2 id="hSettings">Réglages</h2>
+  <fieldset>
+    <legend>Thème</legend>
+    <label><input type="radio" name="theme" value="auto"> Automatique (comme l'appareil)</label>
+    <label><input type="radio" name="theme" value="light"> Clair</label>
+    <label><input type="radio" name="theme" value="dark"> Sombre</label>
+  </fieldset>
+  <fieldset>
+    <legend>Accessibilité</legend>
+    <label><input type="checkbox" id="setContrast"> Contraste élevé : bleu et orange, avec symboles ✓ et ≈ dans les cases (daltonisme)</label>
+  </fieldset>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
 </html>

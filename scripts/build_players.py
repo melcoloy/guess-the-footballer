@@ -532,8 +532,9 @@ def main() -> None:
                 pid = "wd" + b["p"]["value"].rsplit("/Q", 1)[-1]
                 nat = b.get("natLabel", {}).get("value") or b.get("citLabel", {}).get("value") or "?"
                 prev = extra.get(pid, {})
-                if prev.get("nat", "?") in COUNTRIES and prev.get("nat") != "?":
-                    nat = prev["nat"]  # plusieurs nationalités : on garde la première connue
+                known = prev.get("nat")
+                if known and known != "?" and known in COUNTRIES:
+                    nat = known  # plusieurs nationalités : on garde la première connue
                 extra[pid] = {"name": label, "y": int(b["dob"]["value"][:4]), "nat": nat, "pos": pos,
                               "h": prev.get("h") or height_cm(b.get("h", {}).get("value"))}
                 current[pid] = cid

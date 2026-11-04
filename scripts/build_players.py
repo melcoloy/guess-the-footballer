@@ -10,10 +10,15 @@ Sources :
 Les clubs de chaque championnat sont ceux qui ont joué la saison 2025-26 (games.csv),
 auxquels on applique les promus/relégués d'overrides.json.
 
+Génère aussi data/daily.json : le calendrier du « joueur du jour ». Les jours déjà passés
+(et le jour en cours) ne sont jamais réécrits, pour que le joueur du jour ne change pas
+quand les données bougent.
+
 Usage :
     python scripts/build_players.py                 # tout télécharger
     python scripts/build_players.py --no-wikidata   # sans l'étape Wikidata
     python scripts/build_players.py --local DIR     # lit players, clubs et games depuis DIR (.csv ou .csv.gz)
+    python scripts/build_players.py --calendar-only # ne régénère que daily.json à partir de players.json
 
 Aucune dépendance externe : uniquement la bibliothèque standard.
 """
@@ -34,6 +39,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "players.json"
 OVERRIDES = ROOT / "scripts" / "overrides.json"
+DAILY = ROOT / "data" / "daily.json"
+
+# Calendrier du joueur du jour (doit rester cohérent avec START et POOL_DAILY dans app.js)
+DAILY_START = datetime.date(2026, 1, 1)
+DAILY_POOL = 200      # le joueur du jour est tiré parmi les N joueurs les plus cotés
+DAILY_AHEAD = 60      # nombre de jours préparés à l'avance
+DAILY_NO_REPEAT = 150 # un joueur ne revient pas avant ce nombre de jours
 
 BASE_URL = "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/"
 WIKIDATA = "https://query.wikidata.org/sparql"
@@ -227,13 +239,14 @@ QUERY_CLUBS_BY_ARTICLE = """SELECT ?title ?club ?clubTm WHERE {{
   OPTIONAL {{ ?club wdt:P7223 ?clubTm }}
 }}"""
 # Joueurs actuellement au club (affiliation sans date de fin, commencée récemment)
-QUERY_SQUAD = """SELECT ?club ?p ?pLabel ?tm ?dob ?natLabel ?pos ?start WHERE {{
+QUERY_SQUAD = """SELECT ?club ?p ?pLabel ?tm ?dob ?natLabel ?citLabel ?h ?pos ?start WHERE {{
   VALUES ?club {{ {values} }}
   ?p p:P54 ?st . ?st ps:P54 ?club .
   FILTER NOT EXISTS {{ ?st pq:P582 ?end }}
   OPTIONAL {{ ?st pq:P580 ?start }}
   FILTER(!BOUND(?start) || (?start >= "2019-07-01T00:00:00Z"^^xsd:dateTime && ?start <= NOW()))
   ?p wdt:P569 ?dob . FILTER(YEAR(?dob) >= 1986)
+  FILTER NOT EXISTS {{ ?p wdt:P21 wd:Q6581072 }}  # écarte les joueuses (sections féminines rattachées au club)
   # écarte les joueurs qui ont une affiliation en cours plus récente dans un autre club
   FILTER NOT EXISTS {{
     ?p p:P54 ?o . ?o ps:P54 ?other ; pq:P580 ?s2 .
@@ -243,6 +256,8 @@ QUERY_SQUAD = """SELECT ?club ?p ?pLabel ?tm ?dob ?natLabel ?pos ?start WHERE {{
   }}
   OPTIONAL {{ ?p wdt:P2446 ?tm }}
   OPTIONAL {{ ?p wdt:P1532 ?nat }}
+  OPTIONAL {{ ?p wdt:P27 ?cit }}
+  OPTIONAL {{ ?p p:P2048/psn:P2048/wikibase:quantityAmount ?h }}
   OPTIONAL {{
     ?p wdt:P413 ?posItem .
     VALUES (?top ?pos) {{ (wd:Q201330 "GB") (wd:Q336286 "DEF") (wd:Q193592 "MIL") (wd:Q280658 "ATT") }}
@@ -250,7 +265,53 @@ QUERY_SQUAD = """SELECT ?club ?p ?pLabel ?tm ?dob ?natLabel ?pos ?start WHERE {{
   }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
 }}"""
+# Taille, nationalité et pied fort pour compléter les trous de Transfermarkt
+QUERY_DETAILS = """SELECT ?tm ?h ?citLabel ?handLabel WHERE {{
+  VALUES ?tm {{ {values} }}
+  ?p wdt:P2446 ?tm .
+  OPTIONAL {{ ?p p:P2048/psn:P2048/wikibase:quantityAmount ?h }}
+  OPTIONAL {{ ?p wdt:P27 ?cit }}
+  OPTIONAL {{ ?p wdt:P552 ?hand }}
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
+}}"""
 VALID_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}T")
+QID_LABEL = re.compile(r"^Q\d+$")  # élément Wikidata sans nom anglais
+
+
+def height_cm(metres: str | None) -> int:
+    """Taille Wikidata normalisée (en mètres) -> cm, 0 si absurde ou absente."""
+    try:
+        cm = round(float(metres) * 100)
+    except (TypeError, ValueError):
+        return 0
+    return cm if 150 <= cm <= 215 else 0
+
+
+def foot_of(label: str | None) -> str:
+    label = (label or "").lower()
+    if "ambi" in label or "both" in label:
+        return "both"
+    if "left" in label:
+        return "left"
+    if "right" in label:
+        return "right"
+    return ""
+
+
+def wikidata_details(player_ids: list[str]) -> dict[str, dict]:
+    """{id TM: {"h": cm, "nat": [pays en anglais], "foot": ...}} pour les joueurs incomplets."""
+    details: dict[str, dict] = {}
+    for i in range(0, len(player_ids), 200):
+        values = " ".join(f'"{x}"' for x in player_ids[i:i + 200])
+        for b in sparql(QUERY_DETAILS.format(values=values)):
+            d = details.setdefault(b["tm"]["value"], {"h": 0, "nat": [], "foot": ""})
+            d["h"] = d["h"] or height_cm(b.get("h", {}).get("value"))
+            cit = b.get("citLabel", {}).get("value")
+            if cit and cit not in d["nat"]:
+                d["nat"].append(cit)
+            d["foot"] = d["foot"] or foot_of(b.get("handLabel", {}).get("value"))
+        time.sleep(1)
+    return details
 
 
 def wikidata_moves(player_ids: set[str], club_ids: set[str]) -> dict[str, tuple[str, str]]:
@@ -270,9 +331,68 @@ def wikidata_moves(player_ids: set[str], club_ids: set[str]) -> dict[str, tuple[
     return moves
 
 
+# ---------------------------------------------------------------- calendrier du joueur du jour
+
+def legacy_pick(n: int, pool: list[int]) -> int:
+    """Ancienne formule de app.js : sert à reconstituer les jours déjà joués."""
+    return pool[(n * 7919) % len(pool)]
+
+
+def update_calendar(players: list[dict]) -> None:
+    """Complète data/daily.json sans jamais modifier les jours passés ni le jour en cours.
+
+    Format : {"start": "AAAA-MM-JJ", "ids": [id du jour 0, id du jour 1, ...],
+              "players": {id: fiche}}  (fiches des jours récents et à venir, au cas où
+    le joueur quitterait les 5 championnats : la partie du jour reste jouable).
+    """
+    by_id = {p["id"]: p for p in players}
+    pool = sorted(p["id"] for p in sorted(players, key=lambda p: -p["v"])[:DAILY_POOL])
+    cal = json.loads(DAILY.read_text(encoding="utf-8")) if DAILY.exists() else {}
+    if cal.get("start") != DAILY_START.isoformat():
+        cal = {}
+    ids: list[int] = cal.get("ids", [])
+    snapshots: dict[str, dict] = cal.get("players", {})
+
+    # +1 : il est déjà demain en Asie / Océanie quand le script tourne
+    today = (datetime.datetime.now(datetime.timezone.utc).date() - DAILY_START).days
+    frozen = today + 1
+    horizon = today + DAILY_AHEAD
+
+    # jours futurs dont le joueur a quitté les 5 championnats : on les retire
+    for n in range(frozen + 1, len(ids)):
+        if ids[n] not in by_id:
+            del ids[n:]
+            break
+    while len(ids) <= horizon:
+        n = len(ids)
+        if n <= frozen:
+            ids.append(legacy_pick(n, pool))  # jours déjà joués avec l'ancienne formule
+            continue
+        recent = set(ids[-DAILY_NO_REPEAT:])
+        k = (n * 7919) % len(pool)
+        for step in range(len(pool)):
+            cand = pool[(k + step) % len(pool)]
+            if cand not in recent:
+                break
+        ids.append(cand)
+
+    keep = {str(i) for i in ids[max(0, today - 2):]}
+    snapshots = {k: v for k, v in snapshots.items() if k in keep}
+    for i in ids[max(0, today - 2):]:
+        if i in by_id:
+            snapshots[str(i)] = by_id[i]
+    DAILY.write_text(json.dumps({"start": DAILY_START.isoformat(), "ids": ids, "players": snapshots},
+                                ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"Calendrier : {len(ids)} jours dans {DAILY} (jusqu'au "
+          f"{DAILY_START + datetime.timedelta(days=len(ids) - 1)})")
+
+
 # ---------------------------------------------------------------- construction
 
 def main() -> None:
+    if "--calendar-only" in sys.argv:
+        update_calendar(json.loads(OUT.read_text(encoding="utf-8"))["players"])
+        return
     local = sys.argv[sys.argv.index("--local") + 1] if "--local" in sys.argv else None
     use_wikidata = "--no-wikidata" not in sys.argv
     overrides = json.loads(OVERRIDES.read_text(encoding="utf-8")) if OVERRIDES.exists() else {}
@@ -292,6 +412,8 @@ def main() -> None:
     for g in games:
         per_season[int(g["season"])] = per_season.get(int(g["season"]), 0) + 1
     season = max(s for s, n in per_season.items() if n >= 100)
+    # date réelle des données Transfermarkt = dernier match présent dans le dataset
+    tm_date = max((g.get("date") or "")[:10] for g in games) or ""
     club_league: dict[str, str] = {}
     for g in games:
         if int(g["season"]) == season:
@@ -404,9 +526,16 @@ def main() -> None:
                 pos = b.get("pos", {}).get("value")
                 if not pos:
                     continue  # poste inconnu : inutilisable dans le jeu
+                label = b["pLabel"]["value"]
+                if QID_LABEL.match(label):
+                    continue  # pas de nom affichable
                 pid = "wd" + b["p"]["value"].rsplit("/Q", 1)[-1]
-                extra[pid] = {"name": b["pLabel"]["value"], "y": int(b["dob"]["value"][:4]),
-                              "nat": b.get("natLabel", {}).get("value", "?"), "pos": pos}
+                nat = b.get("natLabel", {}).get("value") or b.get("citLabel", {}).get("value") or "?"
+                prev = extra.get(pid, {})
+                if prev.get("nat", "?") in COUNTRIES and prev.get("nat") != "?":
+                    nat = prev["nat"]  # plusieurs nationalités : on garde la première connue
+                extra[pid] = {"name": label, "y": int(b["dob"]["value"][:4]), "nat": nat, "pos": pos,
+                              "h": prev.get("h") or height_cm(b.get("h", {}).get("value"))}
                 current[pid] = cid
             added[display(cid)] = added.get(display(cid), 0) + 1
         for club, n in sorted(added.items()):
@@ -443,6 +572,21 @@ def main() -> None:
         if pid and current.pop(pid, None):
             log.append(f"= {by_id[pid]['name']} retiré (manuel)")
 
+    # 5b. taille / nationalité / pied manquants : complétés via Wikidata
+    details: dict[str, dict] = {}
+    if use_wikidata:
+        incomplete = sorted(pid for pid in current if pid in by_id and (
+            not by_id[pid].get("height_in_cm") or not by_id[pid].get("foot")
+            or (by_id[pid].get("country_of_citizenship") or "?") not in COUNTRIES
+            or by_id[pid].get("country_of_citizenship") == "?"))
+        try:
+            details = wikidata_details(incomplete)
+        except Exception as e:
+            log.append(f"! détails Wikidata non récupérés ({e})")
+        filled = sum(1 for d in details.values() if d["h"] or d["nat"] or d["foot"])
+        if filled:
+            log.append(f"+ {filled} joueurs complétés via Wikidata (taille, nationalité ou pied)")
+
     # 6. export
     out, missing = [], {}
     for pid, cid in current.items():
@@ -452,13 +596,17 @@ def main() -> None:
             if e["nat"] not in COUNTRIES:
                 missing[e["nat"]] = missing.get(e["nat"], 0) + 1
             out.append({"id": -int(pid[2:]), "n": e["name"], "c": display(cid), "l": league_of(cid),
-                        "nat": nat_fr, "cont": cont, "pos": e["pos"], "y": e["y"], "v": 0, "foot": "", "h": 0})
+                        "nat": nat_fr, "cont": cont, "pos": e["pos"], "y": e["y"], "v": 0, "foot": "",
+                        "h": e.get("h", 0)})
             continue
         r = by_id[pid]
         dob = r.get("date_of_birth") or ""
         if r.get("position") not in POSITIONS or len(dob) < 4:
             continue
+        d = details.get(pid, {})
         nat_en = r.get("country_of_citizenship") or "?"
+        if nat_en == "?" or nat_en not in COUNTRIES:
+            nat_en = next((n for n in d.get("nat", []) if n in COUNTRIES), nat_en)
         nat_fr, cont = COUNTRIES.get(nat_en, (nat_en, "?"))
         if nat_en not in COUNTRIES and nat_en != "?":
             missing[nat_en] = missing.get(nat_en, 0) + 1
@@ -472,14 +620,16 @@ def main() -> None:
             "pos": POSITIONS[r["position"]],
             "y": int(dob[:4]),
             "v": int(float(r.get("market_value_in_eur") or 0)),
-            "foot": r.get("foot") or "",
-            "h": int(float(r["height_in_cm"])) if r.get("height_in_cm") else 0,
+            "foot": r.get("foot") or d.get("foot", ""),
+            "h": int(float(r["height_in_cm"])) if r.get("height_in_cm") else d.get("h", 0),
         })
 
     out.sort(key=lambda p: -p["v"])
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"updated": datetime.date.today().isoformat(), "players": out},
+    OUT.write_text(json.dumps({"updated": datetime.date.today().isoformat(), "tm": tm_date,
+                               "wikidata": use_wikidata, "players": out},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    update_calendar(out)
 
     # 7. rapport
     print(f"{len(out)} joueurs écrits dans {OUT} (clubs de base : saison {season}-{season + 1})")
